@@ -20,4 +20,17 @@ config ARM64_RELOC_TEST
 	depends on m
 	tristate "Relocation testing module"
 
+config SFRAME_UNWINDER
+	bool "Sframe unwinder"
+	depends on AS_SFRAME3
+	depends on 64BIT
+	depends on ARCH_SUPPORTS_SFRAME_UNWINDER
+	select SFRAME_LOOKUP
+	help
+	  This option enables the sframe (Simple Frame) unwinder for unwinding
+	  kernel stack traces. It uses unwind table that is directly generated
+	  by toolchain based on DWARF CFI information. In, practice this can
+	  provide more reliable stacktrace results than unwinding with frame
+	  pointers alone.
+
 source "drivers/hwtracing/coresight/Kconfig"
