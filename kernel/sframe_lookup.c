@@ -55,21 +55,22 @@ static struct sframe_table sftbl __ro_after_init;
 	}								\
 })
 
-static struct sframe_fde *find_fde(unsigned long pc)
+static struct sframe_fde *find_fde(struct sframe_table *sftbl_p,
+				   unsigned long pc)
 {
 	int l, r, m, f;
 	s32 pc_off;
 	struct sframe_fde *fdep;
 
-	if (!sftbl.sfhdr_p || !sftbl.fde_p)
+	if (!sftbl_p->sfhdr_p || !sftbl_p->fde_p)
 		return NULL;
 
 	/* Do a binary range search to find the rightmost FDE start_addr < ip */
 	l = m = f = 0;
-	r = sftbl.sfhdr_p->num_fdes;
+	r = sftbl_p->sfhdr_p->num_fdes;
 	while (l < r) {
 		m = l + ((r - l) / 2);
-		fdep = sftbl.fde_p + m;
+		fdep = sftbl_p->fde_p + m;
 		if (fdep->start_addr > (s32)(pc - (unsigned long)fdep))
 			r = m;
 		else
@@ -77,10 +78,10 @@ static struct sframe_fde *find_fde(unsigned long pc)
 	}
 	/* use l - 1 because l will be the first item fdep->start_addr > ip */
 	f = l - 1;
-	if (f >= sftbl.sfhdr_p->num_fdes || f < 0)
+	if (f >= sftbl_p->sfhdr_p->num_fdes || f < 0)
 		return NULL;
 
-	fdep = sftbl.fde_p + f;
+	fdep = sftbl_p->fde_p + f;
 	pc_off = (s32)(pc - (unsigned long)fdep);
 	if (pc_off < fdep->start_addr ||
 	    pc_off > fdep->start_addr + fdep->func_size)
@@ -89,8 +90,8 @@ static struct sframe_fde *find_fde(unsigned long pc)
 	return fdep;
 }
 
-static int find_fre(unsigned long pc, const struct sframe_fde *fdep,
-		    struct sframe_ip_entry *entry)
+static int find_fre(const struct sframe_table *sftbl_p, unsigned long pc,
+		    const struct sframe_fde *fdep, struct sframe_ip_entry *entry)
 {
 	int i, offset_size, offset_count;
 	char *fres, *offsets_loc;
@@ -99,7 +100,7 @@ static int find_fre(unsigned long pc, const struct sframe_fde *fdep,
 	uint8_t fre_info, fde_type = SFRAME_FUNC_FDE_TYPE(fdep->info),
 			fre_type = SFRAME_FUNC_FRE_TYPE(fdep->info);
 
-	fres = sftbl.fre_p + fdep->fres_off;
+	fres = sftbl_p->fre_p + fdep->fres_off;
 
 	/*  Whether PCs in the FREs should be treated as masks or not */
 	if (fde_type == SFRAME_FDE_TYPE_PCMASK)
@@ -154,19 +155,31 @@ static int find_fre(unsigned long pc, const struct sframe_fde *fdep,
 int sframe_find_pc(unsigned long pc, struct sframe_ip_entry *entry)
 {
 	struct sframe_fde *fdep;
+	struct sframe_table *sftbl_p;
 
-	if (!sframe_init)
+	if (!entry || !sframe_init)
 		return -EINVAL;
 
-	memset(entry, 0, sizeof(*entry));
-	entry->ra_offset = sftbl.sfhdr_p->cfa_fixed_ra_offset;
-	entry->fp_offset = sftbl.sfhdr_p->cfa_fixed_fp_offset;
+	if (!is_ksym_addr(pc)) {
+		struct module *mod;
 
-	fdep = find_fde(pc);
+		mod = __module_address(pc);
+		if (!mod || !mod->arch.sframe_init)
+			return -EINVAL;
+		sftbl_p = &mod->arch.sftbl;
+	} else {
+		sftbl_p = &sftbl;
+	}
+
+	memset(entry, 0, sizeof(*entry));
+	entry->ra_offset = sftbl_p->sfhdr_p->cfa_fixed_ra_offset;
+	entry->fp_offset = sftbl_p->sfhdr_p->cfa_fixed_fp_offset;
+
+	fdep = find_fde(sftbl_p, pc);
 	if (!fdep)
 		return -EINVAL;
 
-	return find_fre(pc, fdep, entry);
+	return find_fre(sftbl_p, pc, fdep, entry);
 }
 
 void __init init_sframe_table(void)
@@ -190,4 +203,31 @@ void __init init_sframe_table(void)
 	sftbl.fre_p = __start_sframe_header + SFRAME_HEADER_SIZE(*sftbl.sfhdr_p)
 		+ sftbl.sfhdr_p->fres_off;
 	sframe_init = true;
+}
+
+void sframe_module_init(struct module *mod, void *_sframe, size_t _sframe_size)
+{
+	size_t sframe_size = _sframe_size;
+	void *sframe_buf = _sframe;
+	struct sframe_table _sftbl;
+
+
+	if (sframe_size <= 0)
+		return;
+	_sftbl.sfhdr_p = sframe_buf;
+	if (!_sftbl.sfhdr_p || _sftbl.sfhdr_p->preamble.magic != SFRAME_MAGIC ||
+	    _sftbl.sfhdr_p->preamble.version != SFRAME_VERSION_2 ||
+	    !(_sftbl.sfhdr_p->preamble.flags & SFRAME_F_FDE_SORTED) ||
+	    !(sftbl.sfhdr_p->preamble.flags & SFRAME_F_FDE_FUNC_START_PCREL)) {
+		pr_warn("WARNING: Unable to read sframe header.  Disabling unwinder.\n");
+		return;
+	}
+
+	_sftbl.fde_p = (struct sframe_fde *)(sframe_buf + SFRAME_HEADER_SIZE(*_sftbl.sfhdr_p)
+						+ _sftbl.sfhdr_p->fdes_off);
+	_sftbl.fre_p = sframe_buf + SFRAME_HEADER_SIZE(*_sftbl.sfhdr_p)
+		+ _sftbl.sfhdr_p->fres_off;
+
+	mod->arch.sftbl = _sftbl;
+	mod->arch.sframe_init = true;
 }
