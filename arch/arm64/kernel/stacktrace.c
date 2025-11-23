@@ -14,6 +14,7 @@
 #include <linux/sched/debug.h>
 #include <linux/sched/task_stack.h>
 #include <linux/stacktrace.h>
+#include <linux/sframe_lookup.h>
 
 #include <asm/efi.h>
 #include <asm/irq.h>
@@ -244,6 +245,75 @@ kunwind_next_frame_record(struct kunwind_state *state)
 	return 0;
 }
 
+#ifdef CONFIG_SFRAME_UNWINDER
+/*
+ * Unwind to the next frame according to sframe.
+ */
+static __always_inline int
+unwind_next_frame_sframe(struct kunwind_state *state)
+{
+	unsigned long fp = state->common.fp;
+	unsigned long pc = state->common.pc;
+	unsigned long sp = state->common.sp;
+	unsigned long base_reg, cfa, size;
+	unsigned long pc_addr, fp_addr, new_pc, new_fp;
+	struct sframe_ip_entry entry;
+	struct stack_info *info;
+
+	int err;
+
+	/* FP/SP alignment 8 bytes, PC alignment 4 bytes */
+	if (fp & 0x7 || sp & 0x7 || pc & 0x3)
+		return -EINVAL;
+
+	/*
+	 * Most/all outermost functions are not visible to sframe. So, check for
+	 * a meta frame record if the sframe lookup fails.
+	 */
+	err = sframe_find_pc(state->common.pc, &entry);
+	if (err)
+		return kunwind_next_frame_record_meta(state);
+
+	if (entry.fp_offset == entry.ra_offset)
+		return -EINVAL;
+
+	base_reg = entry.use_fp ? fp : sp;
+
+	/* Set up the initial CFA using fp based info if sp is not set */
+	if (!sp)
+		cfa = fp - entry.fp_offset;
+	else
+		cfa = base_reg + entry.cfa_offset;
+
+	fp_addr = cfa + entry.fp_offset;
+	pc_addr = cfa + entry.ra_offset;
+	size = cfa - fp_addr;
+
+	if (fp_addr & 0x7 || pc_addr & 0x7)
+		return -EINVAL;
+
+	/* Consume the full stack frame size, as calculated from sframe data */
+	info = unwind_find_stack(&state->common, fp_addr, size);
+	if (!info)
+		return -EINVAL;
+
+	new_fp = READ_ONCE(*(unsigned long *)(fp_addr));
+	new_pc = READ_ONCE(*(unsigned long *)(pc_addr));
+
+	if (!new_fp && !new_pc)
+		return kunwind_next_frame_record_meta(state);
+
+	unwind_consume_stack(&state->common, info, fp_addr, size);
+
+	state->common.sp = cfa;
+	state->common.fp = new_fp;
+	state->common.pc = new_pc;
+	state->source = KUNWIND_SOURCE_FRAME;
+
+	return 0;
+}
+#endif
+
 /*
  * Unwind from one frame record (A) to the next frame record (B).
  *
@@ -263,7 +333,18 @@ kunwind_next(struct kunwind_state *state)
 	case KUNWIND_SOURCE_CALLER:
 	case KUNWIND_SOURCE_TASK:
 	case KUNWIND_SOURCE_REGS_PC:
+#ifdef CONFIG_SFRAME_UNWINDER
+	if (!state->common.unreliable)
+		err = unwind_next_frame_sframe(state);
+
+	if ((err && err != -ENOENT) || state->common.unreliable) {
+		/* Fallback to FP based unwinder */
 		err = kunwind_next_frame_record(state);
+		state->common.unreliable = true;
+	}
+#else
+	err = kunwind_next_frame_record(state);
+#endif
 		break;
 	default:
 		err = -EINVAL;
@@ -350,6 +431,9 @@ kunwind_stack_walk(kunwind_consume_fn consume_state,
 		.common = {
 			.stacks = stacks,
 			.nr_stacks = ARRAY_SIZE(stacks),
+#ifdef CONFIG_SFRAME_UNWINDER
+			.sp = 0,
+#endif
 		},
 	};
 
@@ -390,6 +474,43 @@ noinline noinstr void arch_stack_walk(stack_trace_consume_fn consume_entry,
 	kunwind_stack_walk(arch_kunwind_consume_entry, &data, task, regs);
 }
 
+#ifdef CONFIG_SFRAME_UNWINDER
+struct kunwind_reliable_consume_entry_data {
+	stack_trace_consume_fn consume_entry;
+	void *cookie;
+	bool unreliable;
+};
+
+static __always_inline bool
+arch_kunwind_reliable_consume_entry(const struct kunwind_state *state, void *cookie)
+{
+	struct kunwind_reliable_consume_entry_data *data = cookie;
+
+	if (state->common.unreliable) {
+		data->unreliable = true;
+		return false;
+	}
+	return data->consume_entry(data->cookie, state->common.pc);
+}
+
+noinline notrace int arch_stack_walk_reliable(
+				stack_trace_consume_fn consume_entry,
+				void *cookie, struct task_struct *task)
+{
+	struct kunwind_reliable_consume_entry_data data = {
+		.consume_entry = consume_entry,
+		.cookie = cookie,
+		.unreliable = false,
+	};
+
+	kunwind_stack_walk(arch_kunwind_reliable_consume_entry, &data, task, NULL);
+
+	if (data.unreliable)
+		return -EINVAL;
+
+	return 0;
+}
+#else
 static __always_inline bool
 arch_reliable_kunwind_consume_entry(const struct kunwind_state *state, void *cookie)
 {
@@ -419,6 +540,7 @@ noinline noinstr int arch_stack_walk_reliable(stack_trace_consume_fn consume_ent
 	return kunwind_stack_walk(arch_reliable_kunwind_consume_entry, &data,
 				  task, NULL);
 }
+#endif
 
 struct bpf_unwind_consume_entry_data {
 	bool (*consume_entry)(void *cookie, u64 ip, u64 sp, u64 fp);
