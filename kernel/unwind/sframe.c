@@ -638,6 +638,9 @@ static int safe_read_fde(struct sframe_section *sec,
 {
 	int ret;
 
+	if (sec->sec_type == SFRAME_KERNEL)
+		return __read_fde(sec, fde_num, fde);
+
 	if (!user_read_access_begin((void __user *)sec->sframe_start,
 				    sec->sframe_end - sec->sframe_start))
 		return -EFAULT;
@@ -653,6 +656,9 @@ static int safe_read_fre(struct sframe_section *sec,
 {
 	int ret;
 
+	if (sec->sec_type == SFRAME_KERNEL)
+		return __read_fre(sec, fde, fre_addr, fre);
+
 	if (!user_read_access_begin((void __user *)sec->sframe_start,
 				    sec->sframe_end - sec->sframe_start))
 		return -EFAULT;
@@ -666,6 +672,9 @@ static int safe_read_fre_datawords(struct sframe_section *sec,
 				   struct sframe_fre_internal *fre)
 {
 	int ret;
+
+	if (sec->sec_type == SFRAME_KERNEL)
+		return __read_fre_datawords(sec, fde, fre);
 
 	if (!user_read_access_begin((void __user *)sec->sframe_start,
 				    sec->sframe_end - sec->sframe_start))
@@ -690,6 +699,13 @@ static int sframe_validate_section(struct sframe_section *sec)
 		int ret;
 
 		ret = safe_read_fde(sec, i, &fde);
+		/*
+		 * Code in .rodata.text is not considered part of normal kernel
+		 * text, but there is no easy way to prevent sframe data from
+		 * being generated for it.
+		 */
+		if (ret && sec->sec_type == SFRAME_KERNEL)
+			continue;
 		if (ret)
 			return ret;
 
@@ -1015,6 +1031,8 @@ void __init init_sframe_table(void)
 
 	if (WARN_ON(sframe_read_header(&kernel_sfsec)))
 		return;
+	if (WARN_ON(sframe_validate_section(&kernel_sfsec)))
+		return;
 
 	sframe_init = true;
 }
@@ -1031,6 +1049,8 @@ void sframe_module_init(struct module *mod, void *sframe, size_t sframe_size,
 	sec.text_end     = (unsigned long)text + text_size;
 
 	if (WARN_ON(sframe_read_header(&sec)))
+		return;
+	if (WARN_ON(sframe_validate_section(&sec)))
 		return;
 
 	mod->arch.sframe_sec = sec;
