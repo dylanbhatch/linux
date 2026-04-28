@@ -394,3 +394,5 @@ COND_SYSCALL(rseq_slice_yield);
 
 COND_SYSCALL(uretprobe);
 COND_SYSCALL(uprobe);
+
+COND_SYSCALL(stacktrace_setup);

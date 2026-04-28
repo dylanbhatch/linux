@@ -12,8 +12,10 @@
 #include <linux/mm.h>
 #include <linux/string_helpers.h>
 #include <linux/sframe.h>
+#include <linux/syscalls.h>
 #include <asm/unwind_user_sframe.h>
 #include <linux/unwind_user_types.h>
+#include <uapi/linux/stacktrace.h>
 
 #include "sframe.h"
 #include "sframe_debug.h"
@@ -839,4 +841,39 @@ void sframe_free_mm(struct mm_struct *mm)
 		free_section(sec);
 
 	mtree_destroy(&mm->sframe_mt);
+}
+
+/**
+ * sys_stacktrace_setup - register an address for user space stacktrace walking.
+ * @op: Type of operation to perform
+ * @addr_start: The virtual address of the stacktrace information
+ * @addr_length: The length of the stacktrace information
+ * @text_start: The virtual address of the text that @addr_start represents
+ * @text_length: The length of teh text
+ *
+ * This system call is used by dynamic library utilities to inform the kernel
+ * of meta data that it loaded that can be used by the kernel to know how
+ * to stack walk the given text locations.
+ *
+ * Currently only sframes are supported, but in the future, this may be used
+ * to tell the kernel about JIT code which will most likely have a different
+ * format.
+ *
+ * The @op command may be extended and parameters may be used for other
+ * purposes.
+ *
+ * Return: 0 if successful, otherwise a negative error.
+ */
+SYSCALL_DEFINE5(stacktrace_setup, int, op, unsigned long, addr_start,
+		unsigned long, addr_length, unsigned long, text_start,
+		unsigned long, text_length)
+{
+	switch (op) {
+	case STACKTRACE_REGISTER_SFRAME:
+		return sframe_add_section(addr_start, addr_start + addr_length,
+					  text_start, text_start+text_length);
+	case STACKTRACE_UNREGISTER_SFRAME:
+		return sframe_remove_section(addr_start);
+	}
+	return -EINVAL;
 }
