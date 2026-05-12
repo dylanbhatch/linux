@@ -32,6 +32,19 @@ static inline void dbg_init(struct sframe_section *sec)
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 
+	if (sec->sec_type == SFRAME_KERNEL) {
+		if (sec == &kernel_sfsec) {
+			sec->filename = kstrdup("(vmlinux)", GFP_KERNEL);
+		} else {
+			struct module *mod = container_of(sec, struct module,
+							  arch.sframe_sec);
+			sec->filename = kasprintf(GFP_KERNEL, "(%s)",
+						  mod->name);
+		}
+
+		return;
+	}
+
 	guard(mmap_read_lock)(mm);
 	vma = vma_lookup(mm, sec->sframe_start);
 	if (!vma)

@@ -1036,6 +1036,8 @@ void __init init_sframe_table(void)
 	kernel_sfsec.text_start		= (unsigned long)_stext;
 	kernel_sfsec.text_end		= (unsigned long)_etext;
 
+	dbg_init(&kernel_sfsec);
+
 	if (WARN_ON(sframe_read_header(&kernel_sfsec)))
 		return;
 	if (WARN_ON(sframe_validate_section(&kernel_sfsec)))
@@ -1098,6 +1100,8 @@ void sframe_module_init(struct module *mod, void *sframe, size_t sframe_size,
 	sec->sframe_end   = (unsigned long)sframe + sframe_size;
 	sec->text_start   = (unsigned long)text;
 	sec->text_end     = (unsigned long)text + text_size;
+
+	dbg_init(sec);
 
 	if (WARN_ON(sframe_read_header(sec)))
 		return;
