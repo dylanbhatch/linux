@@ -14,7 +14,7 @@
  * Parameters:
  *	x0 - dest
  */
-SYM_FUNC_START(__pi_clear_page)
+SYM_LEAF_FUNC_START(__pi_clear_page)
 #ifdef CONFIG_AS_HAS_MOPS
 	.arch_extension mops
 alternative_if_not ARM64_HAS_MOPS
@@ -48,6 +48,6 @@ alternative_else_nop_endif
 	tst	x0, #(PAGE_SIZE - 1)
 	b.ne	2b
 	ret
-SYM_FUNC_END(__pi_clear_page)
+SYM_LEAF_FUNC_END(__pi_clear_page)
 SYM_FUNC_ALIAS(clear_page, __pi_clear_page)
 EXPORT_SYMBOL(clear_page)

@@ -381,7 +381,7 @@ ISRM0:	.octa		0x0306090c00070a0d01040b0e0205080f
 	/*
 	 * void aesbs_convert_key(u8 out[], u32 const rk[], int rounds)
 	 */
-SYM_FUNC_START(aesbs_convert_key)
+SYM_LEAF_FUNC_START(aesbs_convert_key)
 	ld1		{v7.4s}, [x1], #16		// load round 0 key
 	ld1		{v17.4s}, [x1], #16		// load round 1 key
 
@@ -426,10 +426,10 @@ SYM_FUNC_START(aesbs_convert_key)
 	eor		v17.16b, v17.16b, v7.16b
 	str		q17, [x0]
 	ret
-SYM_FUNC_END(aesbs_convert_key)
+SYM_LEAF_FUNC_END(aesbs_convert_key)
 
 	.align		4
-SYM_FUNC_START_LOCAL(aesbs_encrypt8)
+SYM_LEAF_FUNC_START_LOCAL(aesbs_encrypt8)
 	ldr		q9, [bskey], #16		// round 0 key
 	ldr		q8, M0SR
 	ldr		q24, SR
@@ -489,10 +489,10 @@ SYM_FUNC_START_LOCAL(aesbs_encrypt8)
 	eor		v2.16b, v2.16b, v12.16b
 	eor		v5.16b, v5.16b, v12.16b
 	ret
-SYM_FUNC_END(aesbs_encrypt8)
+SYM_LEAF_FUNC_END(aesbs_encrypt8)
 
 	.align		4
-SYM_FUNC_START_LOCAL(aesbs_decrypt8)
+SYM_LEAF_FUNC_START_LOCAL(aesbs_decrypt8)
 	lsl		x9, rounds, #7
 	add		bskey, bskey, x9
 
@@ -554,7 +554,7 @@ SYM_FUNC_START_LOCAL(aesbs_decrypt8)
 	eor		v3.16b, v3.16b, v12.16b
 	eor		v5.16b, v5.16b, v12.16b
 	ret
-SYM_FUNC_END(aesbs_decrypt8)
+SYM_LEAF_FUNC_END(aesbs_decrypt8)
 
 	/*
 	 * aesbs_ecb_encrypt(u8 out[], u8 const in[], u8 const rk[], int rounds,
@@ -621,21 +621,21 @@ SYM_FUNC_END(aesbs_decrypt8)
 	.endm
 
 	.align		4
-SYM_TYPED_FUNC_START(aesbs_ecb_encrypt)
+SYM_TYPED_LEAF_FUNC_START(aesbs_ecb_encrypt)
 	__ecb_crypt	aesbs_encrypt8, v0, v1, v4, v6, v3, v7, v2, v5
-SYM_FUNC_END(aesbs_ecb_encrypt)
+SYM_LEAF_FUNC_END(aesbs_ecb_encrypt)
 
 	.align		4
-SYM_TYPED_FUNC_START(aesbs_ecb_decrypt)
+SYM_TYPED_LEAF_FUNC_START(aesbs_ecb_decrypt)
 	__ecb_crypt	aesbs_decrypt8, v0, v1, v6, v4, v2, v7, v3, v5
-SYM_FUNC_END(aesbs_ecb_decrypt)
+SYM_LEAF_FUNC_END(aesbs_ecb_decrypt)
 
 	/*
 	 * aesbs_cbc_decrypt(u8 out[], u8 const in[], u8 const rk[], int rounds,
 	 *		     int blocks, u8 iv[])
 	 */
 	.align		4
-SYM_FUNC_START(aesbs_cbc_decrypt)
+SYM_LEAF_FUNC_START(aesbs_cbc_decrypt)
 	frame_push	6
 
 	mov		x19, x0
@@ -719,7 +719,7 @@ SYM_FUNC_START(aesbs_cbc_decrypt)
 
 2:	frame_pop
 	ret
-SYM_FUNC_END(aesbs_cbc_decrypt)
+SYM_LEAF_FUNC_END(aesbs_cbc_decrypt)
 
 	.macro		next_tweak, out, in, const, tmp
 	sshr		\tmp\().2d,  \in\().2d,   #63
@@ -735,7 +735,7 @@ SYM_FUNC_END(aesbs_cbc_decrypt)
 	 * aesbs_xts_decrypt(u8 out[], u8 const in[], u8 const rk[], int rounds,
 	 *		     int blocks, u8 iv[])
 	 */
-SYM_FUNC_START_LOCAL(__xts_crypt8)
+SYM_LEAF_FUNC_START_LOCAL(__xts_crypt8)
 	movi		v18.2s, #0x1
 	movi		v19.2s, #0x87
 	uzp1		v18.4s, v18.4s, v19.4s
@@ -766,7 +766,7 @@ SYM_FUNC_START_LOCAL(__xts_crypt8)
 	mov		bskey, x2
 	mov		rounds, x3
 	br		x16
-SYM_FUNC_END(__xts_crypt8)
+SYM_LEAF_FUNC_END(__xts_crypt8)
 
 	.macro		__xts_crypt, do8, o0, o1, o2, o3, o4, o5, o6, o7
 	frame_push	0, 32
@@ -800,13 +800,13 @@ SYM_FUNC_END(__xts_crypt8)
 	ret
 	.endm
 
-SYM_TYPED_FUNC_START(aesbs_xts_encrypt)
+SYM_TYPED_LEAF_FUNC_START(aesbs_xts_encrypt)
 	__xts_crypt	aesbs_encrypt8, v0, v1, v4, v6, v3, v7, v2, v5
-SYM_FUNC_END(aesbs_xts_encrypt)
+SYM_LEAF_FUNC_END(aesbs_xts_encrypt)
 
-SYM_TYPED_FUNC_START(aesbs_xts_decrypt)
+SYM_TYPED_LEAF_FUNC_START(aesbs_xts_decrypt)
 	__xts_crypt	aesbs_decrypt8, v0, v1, v6, v4, v2, v7, v3, v5
-SYM_FUNC_END(aesbs_xts_decrypt)
+SYM_LEAF_FUNC_END(aesbs_xts_decrypt)
 
 	.macro		next_ctr, v
 	mov		\v\().d[1], x8
@@ -820,7 +820,7 @@ SYM_FUNC_END(aesbs_xts_decrypt)
 	 * aesbs_ctr_encrypt(u8 out[], u8 const in[], u8 const rk[],
 	 *		     int rounds, int blocks, u8 iv[])
 	 */
-SYM_FUNC_START(aesbs_ctr_encrypt)
+SYM_LEAF_FUNC_START(aesbs_ctr_encrypt)
 	frame_push	0
 	ldp		x7, x8, [x5]
 	ld1		{v0.16b}, [x5]
@@ -863,4 +863,4 @@ CPU_LE(	rev		x8, x8		)
 	st1		{v0.16b}, [x5]
 	frame_pop
 	ret
-SYM_FUNC_END(aesbs_ctr_encrypt)
+SYM_LEAF_FUNC_END(aesbs_ctr_encrypt)

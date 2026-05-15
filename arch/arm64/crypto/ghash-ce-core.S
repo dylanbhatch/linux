@@ -66,7 +66,7 @@
 	 * void pmull_ghash_update_p64(int blocks, u64 dg[], const char *src,
 	 *			       u64 const h[4][2], const char *head)
 	 */
-SYM_FUNC_START(pmull_ghash_update_p64)
+SYM_LEAF_FUNC_START(pmull_ghash_update_p64)
 	ld1		{SHASH.2d}, [x3]
 	ld1		{XL.2d}, [x1]
 
@@ -173,7 +173,7 @@ CPU_LE(	rev64		T1.16b, T1.16b	)
 
 5:	st1		{XL.2d}, [x1]
 	ret
-SYM_FUNC_END(pmull_ghash_update_p64)
+SYM_LEAF_FUNC_END(pmull_ghash_update_p64)
 
 	KS0		.req	v8
 	KS1		.req	v9
@@ -417,9 +417,9 @@ CPU_LE(	rev		w8, w8		)
 	 *			  u64 const h[4][2], u64 dg[], u8 ctr[],
 	 *			  u32 const rk[], int rounds, u8 tag[])
 	 */
-SYM_FUNC_START(pmull_gcm_encrypt)
+SYM_LEAF_FUNC_START(pmull_gcm_encrypt)
 	pmull_gcm_do_crypt	1
-SYM_FUNC_END(pmull_gcm_encrypt)
+SYM_LEAF_FUNC_END(pmull_gcm_encrypt)
 
 	/*
 	 * int pmull_gcm_decrypt(int bytes, u8 dst[], const u8 src[],
@@ -427,11 +427,11 @@ SYM_FUNC_END(pmull_gcm_encrypt)
 	 *			 u32 const rk[], int rounds, const u8 l[],
 	 *			 const u8 tag[], u64 authsize)
 	 */
-SYM_FUNC_START(pmull_gcm_decrypt)
+SYM_LEAF_FUNC_START(pmull_gcm_decrypt)
 	pmull_gcm_do_crypt	0
-SYM_FUNC_END(pmull_gcm_decrypt)
+SYM_LEAF_FUNC_END(pmull_gcm_decrypt)
 
-SYM_FUNC_START_LOCAL(pmull_gcm_ghash_4x)
+SYM_LEAF_FUNC_START_LOCAL(pmull_gcm_ghash_4x)
 	movi		MASK.16b, #0xe1
 	shl		MASK.2d, MASK.2d, #57
 
@@ -512,9 +512,9 @@ SYM_FUNC_START_LOCAL(pmull_gcm_ghash_4x)
 	eor		XL.16b, XL.16b, T2.16b
 
 	ret
-SYM_FUNC_END(pmull_gcm_ghash_4x)
+SYM_LEAF_FUNC_END(pmull_gcm_ghash_4x)
 
-SYM_FUNC_START_LOCAL(pmull_gcm_enc_4x)
+SYM_LEAF_FUNC_START_LOCAL(pmull_gcm_enc_4x)
 	ld1		{KS0.16b}, [x5]			// load upper counter
 	sub		w10, w8, #4
 	sub		w11, w8, #3
@@ -577,7 +577,7 @@ SYM_FUNC_START_LOCAL(pmull_gcm_enc_4x)
 	eor		INP3.16b, INP3.16b, KS3.16b
 
 	ret
-SYM_FUNC_END(pmull_gcm_enc_4x)
+SYM_LEAF_FUNC_END(pmull_gcm_enc_4x)
 
 	.section	".rodata", "a"
 	.align		6
