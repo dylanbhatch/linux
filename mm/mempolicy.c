@@ -355,7 +355,7 @@ struct mempolicy *get_task_policy(struct task_struct *p)
 
 	return &default_policy;
 }
-EXPORT_SYMBOL_FOR_MODULES(get_task_policy, "kvm");
+EXPORT_SYMBOL_FOR_MODULES(get_task_policy, "kvm,testmod");
 
 static const struct mempolicy_operations {
 	int (*create)(struct mempolicy *pol, const nodemask_t *nodes);
