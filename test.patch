@@ -1,0 +1,29 @@
+diff --git a/samples/livepatch/testmod.c b/samples/livepatch/testmod.c
+index 4c92574019cb..44d02b74597f 100644
+--- a/samples/livepatch/testmod.c
++++ b/samples/livepatch/testmod.c
+@@ -4,6 +4,7 @@
+ #include <linux/kernel.h>
+ #include <linux/mempolicy.h>
+ #include <linux/sched.h>
++#include <linux/livepatch_helpers.h>
+ 
+ struct mempolicy *get_task_policy(struct task_struct *p);
+ 
+@@ -12,9 +13,15 @@ static noinline void mod_print(void)
+ 	struct mempolicy *p;
+ 	pr_info("%s\n", __func__);
+ 	p = get_task_policy(current);
+-	pr_info("current mempolicy home_node: %d\n", p->home_node);
++	pr_info("current mempolicy home_node (livepatched): %d\n", p->home_node + 1);
+ }
+ 
++static void patch_callback(struct klp_object *obj)
++{
++	mod_print();
++}
++KLP_POST_PATCH_CALLBACK(patch_callback);
++
+ static int mod_export_init(void)
+ {
+ 	mod_print();
